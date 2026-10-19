@@ -1,0 +1,169 @@
+#+TITLE: soccer-scores.el
+#+OPTIONS: toc:nil num:nil
+
+Live soccer scores inside Emacs, with your favorite club front and center.
+Out of the box it follows *AC Milan*, but it works for any club.
+
+Data comes from ESPN's public scoreboard JSON, so *no API key or account is needed*.
+
+* Features
+
+- *All of today's matches* across Serie A, Champions League, Europa League, Coppa Italia, Premier League, La Liga, Bundesliga and Ligue 1 (configurable).
+- *Favorite-club view* with three sections: *Live now*, *Upcoming* and *Recent results*.
+- *League tables* for every configured league, with your club's row highlighted.
+- *Auto-refresh* every 60 seconds while the scores buffer is open.
+- *Mode-line ticker* that shows the live score of your club's match, e.g. =[MIL 1-0 TOR 34']=.
+- *League tables* come from ESPN's =apis/v2/sports/soccer/<league>/standings= endpoint (note: =apis/v2=, not =apis/site/v2=). The parser reads =children[].standings.entries= and looks stats up by name (=gamesPlayed=, =wins=, =ties=, =losses=, =pointsFor=, =pointsAgainst=, =pointDifferential=, =points=, =rank=). Competitions with several groups show one table per group. Tables are cached for =soccer-scores-standings-cache-ttl= seconds.
+- *Goal alerts*: a =GOAL!= message in the echo area when the score changes during a live match.
+- *Asynchronous* requests, so Emacs never freezes while fetching.
+- *Cached* day lookups, so refreshes stay light.
+- No dependencies beyond Emacs itself.
+
+* Requirements
+
+- Emacs 27.1 or later (uses the built-in =json-parse-buffer=).
+- An internet connection.
+
+* Installation
+
+** Manual
+
+Clone the repository and add it to your =load-path=:
+
+#+begin_src sh
+git clone https://github.com/thanhvg/soccer-scores.git ~/.emacs.d/site-lisp/soccer-scores
+#+end_src
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/soccer-scores")
+(require 'soccer-scores)
+(global-set-key (kbd "C-c m") #'soccer-scores-milan)
+#+end_src
+
+** use-package with =:vc= (Emacs 29+)
+
+#+begin_src emacs-lisp
+(use-package soccer-scores
+  :vc (:url "https://github.com/thanhvg/soccer-scores" :rev :newest)
+  :bind (("C-c s" . soccer-scores)
+         ("C-c m" . soccer-scores-milan)))
+#+end_src
+
+** straight.el
+
+#+begin_src emacs-lisp
+(straight-use-package
+ '(soccer-scores :type git :host github :repo "thanhvg/soccer-scores"))
+#+end_src
+
+* Usage
+
+| Command                          | What it does                                                      |
+|----------------------------------+-------------------------------------------------------------------|
+| =M-x soccer-scores=              | Today's matches for every league in =soccer-scores-leagues=.      |
+| =M-x soccer-scores-milan=        | Your favorite club: live, upcoming and recent results.            |
+| =M-x soccer-scores-standings=    | League table (prompts for a league; your club is highlighted).    |
+| =M-x soccer-scores-mode-line-mode= | Toggle the live mode-line score and goal alerts.                |
+| =M-x soccer-scores-debug=        | Show what ESPN returned for each league and day (for debugging).  |
+
+Keys inside the scores buffer:
+
+| Key | Action                                     |
+|-----+--------------------------------------------|
+| =g= | Refresh now                                |
+| =m= | Toggle between all matches and favorite only |
+| =t= | Open a league table                        |
+| =q= | Quit the window                            |
+
+Despite its name, =soccer-scores-milan= follows whatever club you set in
+=soccer-scores-favorite-team=.
+
+Keys inside the standings buffer:
+
+| Key       | Action                          |
+|-----------+---------------------------------|
+| =g=       | Refresh (ignores the cache)     |
+| =n= / =p= | Next / previous league          |
+| =l=       | Choose a league                 |
+| =q=       | Quit the window                 |
+
+* Configuration
+
+** Following a different club
+
+Set the exact ESPN display name and the three-letter abbreviation:
+
+#+begin_src emacs-lisp
+(setq soccer-scores-favorite-team "Juventus"
+      soccer-scores-favorite-abbrev "JUV")
+#+end_src
+
+Names are matched *exactly* (case-insensitive), or by abbreviation. That is
+deliberate: ESPN calls the other Milan club "Inter Milan", which must not match
+"AC Milan". If your club doesn't show up, run =M-x soccer-scores= and copy the
+name exactly as it appears. Also make sure the club's competitions are in
+=soccer-scores-favorite-leagues=.
+
+** Options
+
+| Variable                              | Default                                                  | Description                                                   |
+|---------------------------------------+----------------------------------------------------------+---------------------------------------------------------------|
+| =soccer-scores-favorite-team=         | ="AC Milan"=                                             | Exact ESPN display name of your club.                         |
+| =soccer-scores-favorite-abbrev=       | ="MIL"=                                                  | Short name, also used for matching and in the mode line.      |
+| =soccer-scores-leagues=               | 8 major leagues and cups                                 | Alist of =(ESPN-SLUG . DISPLAY-NAME)= for the all-matches view. |
+| =soccer-scores-favorite-leagues=      | =("ita.1" "uefa.champions" "uefa.europa" "ita.coppa_italia")= | League slugs searched for your club's matches.           |
+| =soccer-scores-favorite-days-back=    | =3=                                                      | Days of past results to show.                                 |
+| =soccer-scores-favorite-days-ahead=   | =10=                                                     | Days of upcoming fixtures to show.                            |
+| =soccer-scores-refresh-interval=      | =60=                                                     | Seconds between automatic refreshes.                          |
+| =soccer-scores-cache-ttl=             | =3600=                                                   | Seconds to cache days other than today.                       |
+| =soccer-scores-standings-cache-ttl=   | =600=                                                    | Seconds to cache a league table.                              |
+
+Example, adding the Premier League and widening the window:
+
+#+begin_src emacs-lisp
+(setq soccer-scores-favorite-leagues '("eng.1" "uefa.champions")
+      soccer-scores-favorite-days-ahead 14)
+#+end_src
+
+League slugs follow ESPN's =country.tier= pattern (=ita.1=, =eng.1=, =esp.1=,
+=ger.1=, =fra.1=) plus competitions such as =uefa.champions= and =uefa.europa=.
+Each league in =soccer-scores-favorite-leagues= costs one request per day in the
+window, so keep that list short.
+
+** Faces
+
+Customize =soccer-scores-league=, =soccer-scores-live=, =soccer-scores-favorite=
+and =soccer-scores-dim= to change the colors.
+
+* How it works
+
+- *Today's view* requests =.../sports/soccer/<league>/scoreboard= for each league in parallel.
+- *Favorite view* requests one day at a time (=?dates=YYYYMMDD=) for each league in =soccer-scores-favorite-leagues=, because ESPN rejected date-range and =limit= parameters with HTTP 400. Results are merged, de-duplicated by event id and filtered to your club.
+- *Caching:* each league/day is stored in an in-memory hash table (=soccer-scores--day-cache=). Today is always re-fetched so live scores stay current; other days are reused until =soccer-scores-cache-ttl= expires. Failed requests are never cached. The cache is lost when Emacs restarts.
+- *League tables* come from ESPN's =apis/v2/sports/soccer/<league>/standings= endpoint (note: =apis/v2=, not =apis/site/v2=). The parser reads =children[].standings.entries= and looks stats up by name (=gamesPlayed=, =wins=, =ties=, =losses=, =pointsFor=, =pointsAgainst=, =pointDifferential=, =points=, =rank=). Competitions with several groups show one table per group. Tables are cached for =soccer-scores-standings-cache-ttl= seconds.
+- *Goal alerts* compare each live match's score with the last value seen by the mode-line timer.
+
+* Troubleshooting
+
+- *Empty favorite view:* run =M-x soccer-scores-debug=. It prints one line per league and day with the HTTP status and event counts.
+- *Club missing:* check the exact spelling with =M-x soccer-scores= (see "Following a different club").
+- *Changes not taking effect:* use =M-x load-file= rather than =require= when reloading, and delete any stale =soccer-scores.elc=.
+- *Force a full refetch:* =M-: (clrhash soccer-scores--day-cache)=, then press =g= in the scores buffer.
+
+* Limitations
+
+- ESPN's API is *unofficial and undocumented*. It may change or be rate limited without notice, and this package may break when it does.
+- Kick-off times are shown in your local time zone. The cache can make a rescheduled future match appear up to an hour late.
+- Only soccer leagues exposed through ESPN's =soccer/<slug>= scoreboards are supported.
+
+* Disclaimer
+
+This project is not affiliated with or endorsed by ESPN, AC Milan, or any league or club.
+Team names and scores belong to their respective owners. Please use the data
+responsibly and keep the refresh interval reasonable.
+
+* Contributing
+
+Issues and pull requests are welcome. When reporting a bug, include your Emacs
+version and the output of =M-x soccer-scores-debug=.
+

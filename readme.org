@@ -49,11 +49,61 @@ git clone https://github.com/thanhvg/soccer-scores.git ~/.emacs.d/site-lisp/socc
          ("C-c m" . soccer-scores-milan)))
 #+end_src
 
-** straight.el
+** Spacemacs
+
+Spacemacs uses evil-mode, and special-mode buffers start in /motion state/, where
+keys such as =g=, =n=, =p= and =t= are taken by evil. The config below rebinds the
+package's keys for motion state and adds a =SPC o s= leader menu.
+
+Install from GitHub by adding this to =dotspacemacs-additional-packages=:
 
 #+begin_src emacs-lisp
-(straight-use-package
- '(soccer-scores :type git :host github :repo "thanhvg/soccer-scores"))
+(soccer-scores :location (recipe :fetcher github :repo "thanhvg/soccer-scores"))
+#+end_src
+
+Or, for a local checkout, use =(add-to-list 'load-path "~/.emacs.d/site-lisp/soccer-scores")=
+at the start of =dotspacemacs/user-config=. Then, in =dotspacemacs/user-config=:
+
+#+begin_src emacs-lisp
+
+(spacemacs/declare-prefix "os" "soccer")
+(spacemacs/set-leader-keys
+  "oss" 'soccer-scores
+  "osm" 'soccer-scores-milan
+  "ost" 'soccer-scores-standings
+  "osl" 'soccer-scores-mode-line-mode)
+
+(with-eval-after-load 'soccer-scores
+  ;; Optional settings
+  (setq soccer-scores-favorite-team "AC Milan"
+        soccer-scores-favorite-abbrev "MIL"
+        soccer-scores-refresh-interval 60)
+  ;; Scores buffer
+  (evil-define-key 'normal soccer-scores-mode-map
+    "gr" #'soccer-scores-refresh
+    "r"  #'soccer-scores-refresh
+    "m"  #'soccer-scores-toggle-favorite
+    "t"  #'soccer-scores-standings
+    "q"  #'quit-window)
+  ;; Standings buffer
+  (evil-define-key 'normal soccer-scores-standings-mode-map
+    "gr" #'soccer-scores-standings-refresh
+    "r"  #'soccer-scores-standings-refresh
+    "J"  #'soccer-scores-standings-next
+    "K"  #'soccer-scores-standings-previous
+    "l"  #'soccer-scores-standings
+    "q"  #'quit-window))
+#+end_src
+
+Keys in the scores buffer become =r= / =gr= (refresh), =m=, =t= and =q=. In the
+standings buffer they are =r= / =gr= (refresh), =J= / =K= (next / previous league),
+=l= and =q=. If you would rather keep the package's default keys, put both modes in
+Emacs state instead (the leader key is then =M-m= rather than =SPC=):
+
+#+begin_src emacs-lisp
+(with-eval-after-load 'soccer-scores
+  (evil-set-initial-state 'soccer-scores-mode 'emacs)
+  (evil-set-initial-state 'soccer-scores-standings-mode 'emacs))
 #+end_src
 
 * Usage
@@ -167,3 +217,7 @@ responsibly and keep the refresh interval reasonable.
 Issues and pull requests are welcome. When reporting a bug, include your Emacs
 version and the output of =M-x soccer-scores-debug=.
 
+* License
+
+Add a =LICENSE= file before publishing. GPL-3.0-or-later is the usual choice for
+Emacs packages, and it matches what Emacs itself uses.
